@@ -112,11 +112,9 @@ class HTP extends EventEmitter{
     };
 
     reg(key,address,port){
-        const soc=this.$socket;
-        soc.send(Buffer.from('REG'+key), {port, address});
-        soc.once('data', buf=>{
+        this.$socket.once('data', buf=>{
             if(buf.slice(0,3).toString()==='INF')this.connect(JSON.parse(buf.slice(3).toString()));
-        });
+        }).send(Buffer.from('REG'+key), {port, address});
     };
 
     connect(remote,callback){
