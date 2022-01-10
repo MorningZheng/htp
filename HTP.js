@@ -4,7 +4,7 @@ const {EventEmitter}=require('events');
 const handler={
     CNT:[
         function (buf,inf){
-            this.emit('connected',this.$couple=inf);
+            this.emit('connect',this.$couple=inf);
         },
     ],
     SND:[
@@ -83,7 +83,7 @@ class HTP extends EventEmitter{
     $work;
 
     $PACK={
-        len:2048,
+        len:1024,
         delay:3000,
     };
 
@@ -121,6 +121,7 @@ class HTP extends EventEmitter{
         if(this.$couple)return;
         this.$socket.send(Buffer.concat([Buffer.from('CNT'),Buffer.alloc(1,0)]),remote,()=>{
             if(callback instanceof Function)callback();
+            this.emit('connected',this.$couple=remote);
         });
     };
 
@@ -189,7 +190,7 @@ class HTP extends EventEmitter{
                 await this._sendingU(task.data.slice(i*this.$PACK.len,(i+1)*this.$PACK.len),i);
             };
 
-            await new Promise((rel,rej)=>{
+            const err=await new Promise((rel)=>{
                 let tmr=-1,cnt=-1;
 
                 const fn=()=>{
@@ -199,9 +200,10 @@ class HTP extends EventEmitter{
                         tmr=setTimeout(()=>{
                             // console.log('time to check');
                             this.$socket.send(_newBody('SND',1),this.$couple);
+                            fn();
                         },this.$CHECK.delay);
                     }else{
-                        rej(new Error('timeout'));
+                        rel(new Error('timeout'));
                     };
                 };
                 fn();
@@ -212,13 +214,16 @@ class HTP extends EventEmitter{
                 });
             });
 
-            this.$socket.send(_newBody('SND',3),this.$couple,()=>{
-                // console.log('a complete');
-                if(this.listenerCount('complete'))this.emit('complete');
-                if(task.callback instanceof Function)task.callback();
-                this.$task.shift();
-                process.nextTick(()=>this._sendT());
-            });
+            if(!err){
+                this.$socket.send(_newBody('SND',3),this.$couple,()=>{
+                    // console.log('a complete');
+                    if(this.listenerCount('drain'))this.emit('drain');
+                    if(task.callback instanceof Function)task.callback();
+                    this.$task.shift();
+                    process.nextTick(()=>this._sendT());
+                });
+            }else if(this.listenerCount('error'))this.emit('error',err);
+            else throw err;
         };
     };
 
